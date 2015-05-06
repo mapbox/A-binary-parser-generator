@@ -1,54 +1,19 @@
-// let's see if we can use node's filesystem operations
-var fs, dataViewBlock;
-if(typeof require !== "undefined") {
-  fs = require('fs');
-  // add window.console.log so transform keeps working
-  window = { console: { log: console.log }};
-}
-
-// Load jDataView and buildDataView if they don't exist
-if(typeof jDataView === "undefined") {
-  // the dirty way, for Node, because these are not
-  // node modules, just plain old code.
-  if(typeof fs !== "undefined") {
-    // get a reference to the object that node makes based on eval...
-    dataViewBlock = this;
-    var jDataViewCode = fs.readFileSync("jDataView.js") + "";
-    eval(jDataViewCode);
-    var buildDataViewCode = fs.readFileSync("buildDataView.js") + "";
-    eval(buildDataViewCode);
-  }
-
-  // the ajax way, for browsers.
-  else if(typeof XMLHttpRequest !== "undefined") {
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', 'jDataView.js', false);
-    xhr.send(null);
-    eval("("+xhr.responseText+")");
-
-    xhr = new XMLHttpRequest();
-    xhr.open('GET', 'buildDataView.js', false);
-    xhr.send(null);
-    eval("("+xhr.responseText+")");
-  }
-}
+var minimist = require('minimist');
+var fs = require('fs');
+var generateParser = require('./transform');
 
 // shell-executed using node?
 if(typeof process.argv !== "undefined") {
-  var arguments = process.argv.splice(2);
-  if(typeof fs !== "undefined") {
-    eval(fs.readFileSync('transform.js')+'');
-  }
-
-  debug = false;
+  var argv = minimist(process.argv.splice(2));
+  var debug = argv['debug'];
 
   // generate the parser code
-  var specfile = fs.readFileSync(arguments[0])+"";
-  var parsercode = generateParser(specfile);
+  var specfile = fs.readFileSync(argv['_'][0], 'utf8');
+  var parsercode = generateParser(specfile, { debug: debug });
 
   // if we're not immediately running this code,
   // print it to terminal or pipe to file, what have you.
-  if (arguments.length === 1) {
+  if (argv['_'].length === 1) {
     console.log(parsercode);
   }
 
@@ -60,18 +25,21 @@ if(typeof process.argv !== "undefined") {
 
   // parsable object
   var setupParseData = function(data) {
-    return {pointer: 0, marks: [], bytecode: dataViewBlock.buildDataView(data)};
+    return {
+      pointer: 0,
+      marks: [],
+      bytecode: data
+    };
   };
 
   // Do we have a file that we want to immediately read in?
-  if (arguments.length > 1)
-  {
+  if (argv['_'].length > 1) {
     // run the parser on a file
-    var data = setupParseData(fs.readFileSync(arguments[1])),
-        parser = new Parser();
+    var data = setupParseData(fs.readFileSync(argv['_'][1]));
+    var parser = new Parser({ debug: debug });
 
     // png image
-    if(arguments[1].indexOf('.png')>-1) {
+    if (argv['_'][1].indexOf('.png') > -1) {
       var png = parser.parse(data);
       var IHDR = parser.getInstance("IHDR");
       var pHYs = parser.getInstance("pHYs");
@@ -79,7 +47,7 @@ if(typeof process.argv !== "undefined") {
     }
 
     // font
-    if(arguments[1].indexOf('.ttf')>-1 || arguments[1].indexOf('.otf')>-1) {
+    if (argv['_'][1].indexOf('.ttf') > -1 || argv[1].indexOf('.otf') > -1) {
       var font = parser.parse(data);
       var maxp = parser.getInstance("maxp");
       console.log("font information: "+maxp.numGlyphs+" glyphs.");

@@ -1,0 +1,32 @@
+{
+  "name": "A-binary-parser-generator",
+  "version": "0.0.0",
+  "description": "This project aims to create a tool that can turn a spec file into a parser skeleton for binary data files such as OpenType fonts, PNG images, etc.",
+  "main": "generate.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "opentype": "node generate.js OpenType.spec test/OpenType/UbuntuMono-R.ttf --debug",
+    "png": "node generate.js PNG.spec",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pomax/A-binary-parser-generator.git"
+  },
+  "keywords": [
+    "OpenType",
+    "PNG",
+    "parser"
+  ],
+  "author": "Mike Kamermans <pomax@nihongoresources.com>",
+  "bugs": {
+    "url": "https://github.com/pomax/A-binary-parser-generator/issues"
+  },
+  "homepage": "https://github.com/pomax/A-binary-parser-generator",
+  "dependencies": {
+    "is-little-endian": "0.0.0",
+    "minimist": "^1.1.1"
+  }
+}

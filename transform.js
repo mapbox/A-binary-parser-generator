@@ -66,11 +66,14 @@
  *
  * (c) 2012 Mike "Pomax" Kamermans
  */
-function generateParser(specfilecontent) {
+
+var littleEndian = require('is-little-endian');
+
+module.exports = function generateParser(specfilecontent, options) {
 
   var search, replace, re, regExpReplace = function(data, search, replace) {
     var newString = data.replace(new RegExp(search, "gm"), replace);
-    if(debug && newString === data) { window.console.log("NOTE: "+search+" -> "+replace+" did not modify the string."); }
+    if(options.debug && newString === data) { console.log("NOTE: "+search+" -> "+replace+" did not modify the string."); }
     return newString; }
 
 
@@ -88,7 +91,7 @@ function generateParser(specfilecontent) {
   // Get the defining collection
   var masterFunction = specfilecontent.match(/Defining\s+Collection\s+(\S+)/);
   if(masterFunction === null) {
-    window.console.log("No Defining Collection found, resultant parser code will lack a call to the relevant read function at the end of Parser.parse(data)!");
+    console.log("No Defining Collection found, resultant parser code will lack a call to the relevant read function at the end of Parser.parse(data)!");
   } else {
     masterFunction = masterFunction[1];
     search = "Defining\\s+Collection";
@@ -202,7 +205,7 @@ function generateParser(specfilecontent) {
             "$1  $1struct.$6 = f$2(data);\n"+
             "$1} else {\n"+
             "$1  $1struct.$6 = [];\n"+
-            "$1  if(debug) window.console.log('reading '+struct.$2+' as '+$4+'['+struct.$5+'] of raw data');\n"+
+            "$1  if(this.options.debug) console.log('reading '+struct.$2+' as '+$4+'['+struct.$5+'] of raw data');\n"+
             "$1  parser.readArray(parser, data, struct, struct.$6, \"$4\", struct.$5); \n"+
             "$1}";
   specfilecontent = regExpReplace(specfilecontent, search, replace);
@@ -321,8 +324,8 @@ function generateParser(specfilecontent) {
 
   // Convert warning message
   search = "(^[ \\t]*)WARN (.*)";
-  replace = "$1if(window.console) {\n"+
-            "$1  window.console.log(\"WARNING: $2\");\n"+
+  replace = "$1if(console) {\n"+
+            "$1  console.log(\"WARNING: $2\");\n"+
             "$1}";
   specfilecontent = regExpReplace(specfilecontent, search, replace);
 
@@ -349,7 +352,9 @@ function generateParser(specfilecontent) {
                     "arrayReadQueued: false",
                     "delayedArrays: []",
                     "arithmeticArrayReadQueued: false",
-                    "delayedArithmeticArrays: []"];
+                    "delayedArithmeticArrays: []",
+                    "endianness: " + (this.littleEndian ? '"LE"' : '"BE"'),
+                    "debug: " + options.debug];
 
   /**
    * add a read function to the list of known read functions
@@ -399,9 +404,9 @@ function generateParser(specfilecontent) {
    * read a single byte numerical value from the data object, moving the pointer forward by 1 byte
    */
   var readBYTE = function(data) {
-    if(debug) window.console.log('reading BYTE at '+data.pointer+'.');
-    var val = data.bytecode.getUint8(data.pointer++);
-    if(debug) window.console.log('value = '+val+'.');
+    if(this.debug) console.log('reading BYTE at '+data.pointer+'.');
+    var val = data.bytecode.readUInt8(data.pointer++);
+    if(this.debug) console.log('value = '+val+'.');
     return val;
   };
   predefined.push("readBYTE: "+readBYTE.toString());
@@ -410,9 +415,9 @@ function generateParser(specfilecontent) {
    * read a byte from the data object and convert it to an ascii letter
    */
   var readASCII = function(data, parser) {
-    if(debug) window.console.log('reading ASCII character at '+data.pointer+'.');
-    var val = String.fromCharCode(data.bytecode.getUint8(data.pointer++));
-    if(debug) window.console.log('value = '+val+'.');
+    if(this.debug) console.log('reading ASCII character at '+data.pointer+'.');
+    var val = String.fromCharCode(data.bytecode.readUInt8(data.pointer++));
+    if(this.debug) console.log('value = '+val+'.');
     return val;
   };
   predefined.push("readASCII: "+readASCII.toString());
@@ -421,10 +426,10 @@ function generateParser(specfilecontent) {
    * read an unsigned two byte numerical value from the data object, moving the pointer forward by 2 bytes
    */
   var readUSHORT = function(data) {
-    if(debug) window.console.log('reading USHORT at '+data.pointer+'.');
-    var val = data.bytecode.getUint16(data.pointer);
+    if(this.debug) console.log('reading USHORT at '+data.pointer+'.');
+    var val = data.bytecode['readUInt16' + this.endianness](data.pointer);
     data.pointer += 2;
-    if(debug) window.console.log('value = '+val+'.');
+    if(this.debug) console.log('value = '+val+'.');
     return val;
   };
   predefined.push("readUSHORT: "+readUSHORT.toString());
@@ -433,10 +438,10 @@ function generateParser(specfilecontent) {
    * read a signed two byte numerical value from the data object, moving the pointer forward by 2 bytes
    */
   var readSHORT = function(data) {
-    if(debug) window.console.log('reading SHORT at '+data.pointer+'.');
-    var val = data.bytecode.getInt16(data.pointer);
+    if(this.debug) console.log('reading SHORT at '+data.pointer+'.');
+    var val = data.bytecode['readInt16' + this.endianness](data.pointer);
     data.pointer += 2;
-    if(debug) window.console.log('value = '+val+'.');
+    if(this.debug) console.log('value = '+val+'.');
     return val;
   };
   predefined.push("readSHORT: "+readSHORT.toString());
@@ -445,10 +450,10 @@ function generateParser(specfilecontent) {
    * read an unsigned three byte numerical value from the data object, moving the pointer forward by 3 bytes
    */
   var readUINT24 = function(data) {
-    if(debug) window.console.log('reading UINT24 at '+data.pointer+'.');
-    var val = data.bytecode.getUint16(data.pointer) * 256 + data.bytecode.getUint8(data.pointer+2);
+    if(this.debug) console.log('reading UINT24 at '+data.pointer+'.');
+    var val = data.bytecode['readUInt16' + this.endianness](data.pointer) * 256 + data.bytecode.readUInt8(data.pointer+2);
     data.pointer += 3;
-    if(debug) window.console.log('value = '+val+'.');
+    if(this.debug) console.log('value = '+val+'.');
     return val;
   };
   predefined.push("readUINT24: "+readUINT24.toString());
@@ -457,10 +462,10 @@ function generateParser(specfilecontent) {
    * read an unsigned four byte numerical value from the data object, moving the pointer forward by 4 bytes
    */
   var readULONG = function(data) {
-    if(debug) window.console.log('reading ULONG at '+data.pointer+'.');
-    var val = data.bytecode.getUint32(data.pointer);
+    if(this.debug) console.log('reading ULONG at '+data.pointer+'.');
+    var val = data.bytecode['readUInt32' + this.endianness](data.pointer);
     data.pointer += 4;
-    if(debug) window.console.log('value = '+val+'.');
+    if(this.debug) console.log('value = '+val+'.');
     return val;
   };
   predefined.push("readULONG: "+readULONG.toString());
@@ -469,10 +474,10 @@ function generateParser(specfilecontent) {
    * read a signed four byte numerical value from the data object, moving the pointer forward by 4 bytes
    */
   var readLONG = function(data) {
-    if(debug) window.console.log('reading LONG at '+data.pointer+'.');
-    var val = data.bytecode.getInt32(data.pointer);
+    if(this.debug) console.log('reading LONG at '+data.pointer+'.');
+    var val = data.bytecode['readInt32' + this.endianness](data.pointer);
     data.pointer += 4;
-    if(debug) window.console.log('value = '+val+'.');
+    if(this.debug) console.log('value = '+val+'.');
     return val;
   };
   predefined.push("readLONG: "+readLONG.toString());
@@ -481,7 +486,7 @@ function generateParser(specfilecontent) {
    * read a compound structure from the data object, moving the pointer forward by however many bytes it comprises
    */
   var readStructure = function(data, type, locality, struct, offset) {
-    if(debug) window.console.log('reading '+(typeof type === 'function' ? 'function' : type) +' structure at '+locality+' offset '+offset+'.');
+    if(this.debug) console.log('reading '+(typeof type === 'function' ? 'function' : type) +' structure at '+locality+' offset '+offset+'.');
     var curptr = data.pointer;
     if(locality==="GLOBAL") {
       data.pointer = offset;
@@ -494,7 +499,7 @@ function generateParser(specfilecontent) {
                        "if(typeof parser.getReadFunction('"+type.replace(/\W/,'_')+"') !== 'undefined') { "+
                        "  return parser.getReadFunction('"+type.replace(/\W/,'_')+"')(data, struct); "+
                        "} else {"+
-                       "  window.console.log('WARNING = read"+type+"() does not exist - Collection ["+type+"] missing from .spec file?');"+
+                       "  console.log('WARNING = read"+type+"() does not exist - Collection ["+type+"] missing from .spec file?');"+
                        "  return false; }");
     }
     var structure = f(data,struct,this);
@@ -507,7 +512,7 @@ function generateParser(specfilecontent) {
    * whenever a collection instance is built, treat it as represenative of that collection set
    */
   var bindInstance = function(name, instance) {
-    if(debug) window.console.log('binding an instance of '+name+'.');
+    if(this.debug) console.log('binding an instance of '+name+'.');
     this.instances[name] = instance;
   };
   predefined.push("bindInstance: "+bindInstance.toString());
@@ -516,7 +521,7 @@ function generateParser(specfilecontent) {
    * get a representative collection
    */
   var getInstance = function(name) {
-    if(debug) window.console.log('getting the instance for '+name+'.');
+    if(this.debug) console.log('getting the instance for '+name+'.');
     return this.instances[name];
   };
   predefined.push("getInstance: "+getInstance.toString());
@@ -525,7 +530,7 @@ function generateParser(specfilecontent) {
    * queue a delayed array read
    */
   var delayArrayRead = function(parser, data, pointer, readFunction, struct, propertyName, tableName, tablePropertyName) {
-    if(debug) window.console.log('delaying an array read for struct.'+propertyName+', based on '+tableName+'.'+tablePropertyName);
+    if(this.debug) console.log('delaying an array read for struct.'+propertyName+', based on '+tableName+'.'+tablePropertyName);
     parser.delayedArrays.push({parser:parser, data:data, pointer:pointer, readFunction:readFunction, struct:struct, propertyName:propertyName, tableName:tableName, tablePropertyName:tablePropertyName});
     if(!parser.arrayReadQueued) {
       parser.arrayReadQueued = true;
@@ -538,7 +543,7 @@ function generateParser(specfilecontent) {
    * process the list of delayed arrays
    */
   var processArrayRead = function() {
-    if(debug) window.console.log('trying to process all entries in the array queue');
+    if(this.debug) console.log('trying to process all entries in the array queue');
     var i, last, e, tbl;
     for(i=0, last=this.delayedArrays.length; i<last; i++) {
       e = this.delayedArrays[i];
@@ -566,7 +571,7 @@ function generateParser(specfilecontent) {
    * queue a delayed array read
    */
   var delayArithmeticArrayRead = function(parser, data, pointer, readFunction, struct, propertyName, tableNames, tablePropertyNames, operator) {
-    if(debug) window.console.log('delaying an array read for struct.'+propertyName+', based on ['+tableNames.join(',')+'].['+tablePropertyNames.join(',')+'] using ['+operator+']');
+    if(this.debug) console.log('delaying an array read for struct.'+propertyName+', based on ['+tableNames.join(',')+'].['+tablePropertyNames.join(',')+'] using ['+operator+']');
     parser.delayedArithmeticArrays.push({parser:parser, data:data, pointer:pointer, readFunction:readFunction, struct:struct, propertyName:propertyName, tableNames:tableNames, tablePropertyNames:tablePropertyNames, operator:operator});
     if(!parser.arithmeticArrayReadQueued) {
       parser.arithmeticArrayReadQueued = true;
@@ -605,7 +610,7 @@ function generateParser(specfilecontent) {
    * process the list of delayed arrays
    */
   var processArithmeticArrayRead = function() {
-    if(debug) window.console.log('trying to process all entries in the arithmetic array queue');
+    if(this.debug) console.log('trying to process all entries in the arithmetic array queue');
     var i, last, e, count;
     for(i=0, last=this.delayedArithmeticArrays.length; i<last; i++) {
       e = this.delayedArithmeticArrays[i];
@@ -646,13 +651,14 @@ function generateParser(specfilecontent) {
   /**
    * The final result is the predefined code + the converted specification parsing code
    */
-  return "function Parser() {\n"+
+  return "function Parser(options) {\n"+
          "  this.readFunctions = {};\n"+
          "  this.instances = {};\n"+
          "  this.arrayReadQueued = false;\n"+
          "  this.delayedArrays = [];\n"+
          "  this.arithmeticArrayReadQueued = false;\n"+
          "  this.delayedArithmeticArrays = [];\n"+
+         "  this.options = options;\n"+
          "};\n"+
          "\n"+
          "Parser.prototype = {\n" +
@@ -664,4 +670,4 @@ function generateParser(specfilecontent) {
          "}\n};\n"+
          //"var parser = new Parser();\n"+
          "";
-}
+};
